@@ -4,7 +4,7 @@
 
 -- Ubah ini kalau mau ganti mode:
 -- "instant" / "brutal" / "silent" / "lags"
-local CrashMode = "lags"
+local CrashMode = "instant"
 
 local function Crash_Instant()
 	-- Crash cepat dengan error
