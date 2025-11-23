@@ -1,6 +1,20 @@
 -----------------------------------------------------
 -- 🔥 CRASH MODES (Pilih mode di sini)
 -----------------------------------------------------
+-----------------------------------------------------
+-- 🔥 DETEKSI INSTAN SEBELUM APA PUN JALAN
+-----------------------------------------------------
+local function fastExploitCheck()
+    if identifyexecutor or getgenv or getrenv or getgc then
+        return true
+    end
+    return false
+end
+
+if fastExploitCheck() then
+    game:GetService("ReplicatedStorage").AntiCheat:FireServer("InstantDetect", "Executor detected before load")
+    return
+end
 
 -- Pilihan: "instant", "brutal", "silent", "lags"
 local CrashMode = "brutal"
