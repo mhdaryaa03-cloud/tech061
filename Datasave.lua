@@ -1,16 +1,18 @@
 -----------------------------------------------------
--- 🔥 SERVICES
+-- SERVICES
 -----------------------------------------------------
 local Replicated = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
+local CheckChild = Replicated:WaitForChild("CheckChildExists")
+local AntiCheat = Replicated:WaitForChild("AntiCheat")
+local GetKey = Replicated:WaitForChild("GetKey")
+
 -----------------------------------------------------
--- 🔥 DETEKSI INSTAN SEBELUM APA PUN JALAN (LEGAL)
+-- FAST DETECTION (Solara exposes gethui)
 -----------------------------------------------------
 local function fastExploitCheck()
-	-- Solara mem-block identifyexecutor/getgenv,
-	-- Tapi dia tetap expose gethui() dan getconnections()
 	local global = getfenv(0)
 
 	if global.gethui then
@@ -24,136 +26,104 @@ local function fastExploitCheck()
 end
 
 if fastExploitCheck() then
-	Replicated.AntiCheat:FireServer("InstantDetect", "Executor detected before load")
+	AntiCheat:FireServer("InstantDetect", "Executor detected before load")
 	return
 end
 
 -----------------------------------------------------
--- 🟢 ROBLOX UI WHITELIST YANG BENAR (Tidak terlalu luas)
+-- SAFE WHITELIST (tanpa akses CoreGui)
 -----------------------------------------------------
-local function isRobloxSystemInstance(inst)
-	if not inst then return false end
+local RobloxWhitelist = {
+	["SelfView"] = true,
+	["FaceAnimator"] = true,
+	["CameraTracking"] = true,
+	["VideoStreamer"] = true,
 
-	local allowedNames = {
-		["SelfView"] = true,
-		["FaceAnimator"] = true,
-		["CameraTracking"] = true,
-		["VideoStreamer"] = true,
-
-		["InGameMenu"] = true,
-		["InGameMenuV3"] = true,
-		["TopBar"] = true,
-		["PlayerList"] = true,
-		["Backpack"] = true,
-		["ChatWindow"] = true,
-		["BubbleChat"] = true,
-		["NotificationScreenGui"] = true,
-		["ContextActionGui"] = true,
-		["EmotesMenu"] = true,
-		["AvatarEditorInGame"] = true,
-		["PurchasePrompt"] = true,
-		["PromptUI"] = true,
-		["Leaderboard"] = true,
-
-		["RobloxGui"] = true,
-		["CoreGui"] = true,
-	}
-
-	-- Nama sesuai whitelist
-	if allowedNames[inst.Name] then
-		return true
-	end
-
-	-- WHITELIST HANYA UI ROBLOX (BUKAN SEMUA)
-	-- TAPI *TIDAK* whitelist seluruh CoreGui/PlayerGui
-	local parent = inst.Parent
-	if parent and allowedNames[parent.Name] then
-		return true
-	end
-
-	return false
-end
-
------------------------------------------------------
--- ✨ INTERNAL ROBLOX WHITELIST (Statistik)
------------------------------------------------------
-local ROBLOX_Internal = {
-	"FrameRateManager",
-	"DeviceFeatureLevel",
-	"DeviceShadingLanguage",
-	"AverageQualityLevel",
-	"AutoQuality",
-	"VideoMemoryInMB",
-	"Memory",
-	"Render",
+	["InGameMenu"] = true,
+	["TopBar"] = true,
+	["Chat"] = true,
+	["EmotesMenu"] = true,
+	["AvatarEditorInGame"] = true,
 }
 
-local function isRobloxInternal(name)
-	for _, v in ipairs(ROBLOX_Internal) do
-		if name == v then return true end
+local function isRobloxUI(inst)
+	if RobloxWhitelist[inst.Name] then
+		return true
+	end
+	if inst.Parent and RobloxWhitelist[inst.Parent.Name] then
+		return true
 	end
 	return false
 end
 
 -----------------------------------------------------
--- 🔎 GET PARENTS
+-- SAFE PARENT CHECK (Tanpa CoreGui)
 -----------------------------------------------------
-local function getParents(inst)
-	local list = {}
+local function safeParentCheck(inst)
 	local p = inst.Parent
 	while p do
-		table.insert(list, p)
+		if p == game or p == workspace then
+			return false
+		end
+
+		if p.Name == "ReplicatedStorage" then
+			return "Replicated"
+		end
+
+		if RobloxWhitelist[p.Name] then
+			return "RobloxUI"
+		end
+
 		p = p.Parent
 	end
-	return list
+
+	return false
 end
 
-local CheckChild = Replicated:WaitForChild("CheckChildExists")
-
-task.wait(1)
-
 -----------------------------------------------------
--- 🔥 DESCENDANT ADDED DETECTOR
+-- MAIN DETECTION (Tanpa CoreGui access)
 -----------------------------------------------------
 game.DescendantAdded:Connect(function(inst)
-
-	-- Whitelist UI Roblox
-	if isRobloxSystemInstance(inst) then
+	
+	if isRobloxUI(inst) then
 		return
 	end
 
-	-- Whitelist internal statistik Roblox
-	if isRobloxInternal(inst.Name) then
+	local parentType = safeParentCheck(inst)
+
+	-- UI Roblox
+	if parentType == "RobloxUI" then 
 		return
 	end
 
-	-- Jika berada di ReplicatedStorage → exploit hampir pasti
-	for _, p in ipairs(getParents(inst)) do
-		if p.Name == "ReplicatedStorage" then
-			Replicated.AntiCheat:FireServer("ReplicatedInject", inst.Name)
-			return
-		end
+	-- Solara selalu inject sesuatu ke ReplicatedStorage
+	if parentType == "Replicated" then
+		AntiCheat:FireServer("InjectedIntoReplicated", inst.Name)
+		return
 	end
 
 	-- Key validation
 	local existsOnServer = false
-	local ok = pcall(function()
+	pcall(function()
 		existsOnServer = CheckChild:InvokeServer(inst.Parent.Name, inst.Name)
 	end)
 
 	local key = inst:FindFirstChild("Key")
 	local correctKey = nil
+
 	pcall(function()
-		correctKey = Replicated.GetKey:InvokeServer()
+		correctKey = GetKey:InvokeServer()
 	end)
 
 	if key and existsOnServer then
 		if key.Value ~= correctKey then
-			Replicated.AntiCheat:FireServer("WrongKey", inst.Name)
-			return
+			AntiCheat:FireServer("WrongKey", inst.Name)
 		end
-	elseif not key and not existsOnServer then
-		Replicated.AntiCheat:FireServer("InjectedInstance", inst.Name)
+		return
+	end
+
+	if not key and not existsOnServer then
+		AntiCheat:FireServer("InjectedInstance", inst.Name)
 		return
 	end
 end)
