@@ -46,46 +46,53 @@ end)
 -- WHITELIST UI ROBLOX DI COREGUI
 -- (BIAR SELF VIEW, MENU, CHAT, DLL NGGAK KEDETECT)
 -----------------------------------------------------
-local CoreGuiWhitelist = {
-	-- container utama roblox
-	["RobloxGui"] = true,
-	["DevConsoleMaster"] = true,
+local RobloxSystemWhitelist = {
+    -- SELF VIEW SISTEM
+    ["SelfView"] = true,
+    ["FaceAnimator"] = true,
+    ["CameraTracking"] = true,
+    ["VideoStreamer"] = true,
 
-	-- camera / self view / video / capture
-	["SelfView"] = true,
-	["FaceAnimator"] = true,
-	["CameraTracking"] = true,
-	["VideoStreamer"] = true,
-	["RecordTab"] = true,
+    -- UI MENU / CORE PACKAGES
+    ["InGameMenu"] = true,
+    ["InGameMenuV3"] = true,
+    ["MenuIcon"] = true,
+    ["TopBar"] = true,
+    ["PlayerList"] = true,
+    ["PlayerListManager"] = true,
+    ["Chat"] = true,
+    ["ChatWindow"] = true,
+    ["BubbleChat"] = true,
 
-	-- topbar / menu / settings
-	["InGameMenu"] = true,
-	["InGameMenuV3"] = true,
-	["TopBar"] = true,
-	["PlayerList"] = true,
-	["PlayerListManager"] = true,
-	["NotificationFrame"] = true,
-	["NotificationScreenGui"] = true,
+    -- AVATAR EDITOR
+    ["AvatarEditor"] = true,
+    ["AvatarEditorInGame"] = true,
+    ["AvatarEditorPrompts"] = true,
+    ["AvatarEditorPrompt"] = true,
 
-	-- chat
-	["Chat"] = true,
-	["ChatWindow"] = true,
-	["BubbleChat"] = true,
+    -- PURCHASE UI
+    ["PurchasePrompt"] = true,
+    ["PromptUI"] = true,
 
-	-- avatar / emote / backpack / purchase
-	["AvatarEditorInGame"] = true,
-	["AvatarEditor"] = true,
-	["EmotesMenu"] = true,
-	["EmotesList"] = true,
-	["Backpack"] = true,
-	["BackpackUI"] = true,
-	["PurchasePrompt"] = true,
-	["PromptUI"] = true,
+    -- REPORT / SETTINGS
+    ["ReportDialog"] = true,
+    ["SettingsHub"] = true,
 
-	-- sistem lain
-	["ContextActionGui"] = true,
-	["ReportDialog"] = true,
-	["Leaderboard"] = true,
+    -- EMOTES
+    ["EmotesMenu"] = true,
+    ["EmotesList"] = true,
+
+    -- NOTIFICATIONS
+    ["NotificationScreenGui"] = true,
+
+    -- BACKPACK / TOOLBAR
+    ["Backpack"] = true,
+    ["BackpackUI"] = true,
+
+    -- Query hanya CoreGui
+    ["CoreGui"] = true,
+    ["RobloxGui"] = true,
+
 }
 
 local function isWhitelistedCoreGui(inst)
