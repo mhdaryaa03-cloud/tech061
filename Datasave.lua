@@ -4,6 +4,7 @@
 local Replicated = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
 
 local CheckChild = Replicated:WaitForChild("CheckChildExists")
 local AntiCheat = Replicated:WaitForChild("AntiCheat")
@@ -13,103 +14,198 @@ local GetKey = Replicated:WaitForChild("GetKey")
 -- FAST DETECTION (Executor API exposure)
 -----------------------------------------------------
 local function fastExploitCheck()
-	local g = getfenv(0)
+	-- sebagian besar executor naruh API di global env script mereka sendiri,
+	-- tapi kalau ada yang bocor ke env kita, langsung ke-detect
+	local ok, env = pcall(getfenv, 0)
+	if not ok or type(env) ~= "table" then
+		return false
+	end
 
-	if g.identifyexecutor then return true end
-	if g.getgenv then return true end
-	if g.getconnections then return true end
-	if g.getloadedmodules then return true end
+	if env.identifyexecutor then return true end
+	if env.getgenv then return true end
+	if env.getconnections then return true end
+	if env.getloadedmodules then return true end
 
 	return false
 end
 
 if fastExploitCheck() then
-	AntiCheat:FireServer("InstantDetect", "Executor signature detected")
+	AntiCheat:FireServer("InstantDetect", "Executor signature detected (global env)")
 	return
 end
 
 -----------------------------------------------------
--- WHITELIST
+-- CORE GUI SERVICE (TEMPAT UI EXECUTOR BIASA NANGKRING)
 -----------------------------------------------------
-local RobloxWhitelist = {
+local CoreGui
+pcall(function()
+	CoreGui = game:GetService("CoreGui")
+end)
+
+-----------------------------------------------------
+-- WHITELIST UI ROBLOX DI COREGUI
+-- (BIAR SELF VIEW, MENU, CHAT, DLL NGGAK KEDETECT)
+-----------------------------------------------------
+local CoreGuiWhitelist = {
+	-- container utama roblox
+	["RobloxGui"] = true,
+	["DevConsoleMaster"] = true,
+
+	-- camera / self view / video / capture
 	["SelfView"] = true,
 	["FaceAnimator"] = true,
 	["CameraTracking"] = true,
 	["VideoStreamer"] = true,
+	["RecordTab"] = true,
 
+	-- topbar / menu / settings
 	["InGameMenu"] = true,
+	["InGameMenuV3"] = true,
 	["TopBar"] = true,
+	["PlayerList"] = true,
+	["PlayerListManager"] = true,
+	["NotificationFrame"] = true,
+	["NotificationScreenGui"] = true,
+
+	-- chat
 	["Chat"] = true,
-	["EmotesMenu"] = true,
+	["ChatWindow"] = true,
+	["BubbleChat"] = true,
+
+	-- avatar / emote / backpack / purchase
 	["AvatarEditorInGame"] = true,
+	["AvatarEditor"] = true,
+	["EmotesMenu"] = true,
+	["EmotesList"] = true,
+	["Backpack"] = true,
+	["BackpackUI"] = true,
+	["PurchasePrompt"] = true,
+	["PromptUI"] = true,
+
+	-- sistem lain
+	["ContextActionGui"] = true,
+	["ReportDialog"] = true,
+	["Leaderboard"] = true,
 }
 
-local function isRobloxUI(inst)
-	if RobloxWhitelist[inst.Name] then
-		return true
-	end
-	if inst.Parent and RobloxWhitelist[inst.Parent.Name] then
-		return true
-	end
-	return false
-end
+local function isWhitelistedCoreGui(inst)
+	if not CoreGui then return false end
 
------------------------------------------------------
--- SAFE: Detector hanya bekerja untuk item DI DALAM
--- ReplicatedStorage > scripts buatan player
------------------------------------------------------
-local function isSuspicious(inst)
-	-- bukan UI
-	if isRobloxUI(inst) then return false end
-
-	-- karakter player aman
-	if inst:IsDescendantOf(LocalPlayer.Character) then return false end
-
-	-- playergui aman
-	if inst:IsDescendantOf(LocalPlayer:WaitForChild("PlayerGui")) then return false end
-
-	-- hanya detect item yang ditempatkan LANGSUNG oleh exploit
-	if inst.Parent == Replicated then
-		return true
+	local p = inst
+	while p and p ~= CoreGui and p ~= game do
+		if CoreGuiWhitelist[p.Name] then
+			return true
+		end
+		p = p.Parent
 	end
 
 	return false
 end
 
 -----------------------------------------------------
--- MAIN DETECTION (HANYA DETECT YANG BENAR-BENAR JANGGAL)
+-- DETEKSI UI EXECUTOR DI COREGUI
 -----------------------------------------------------
-game.DescendantAdded:Connect(function(inst)
+local function handleCoreGuiInstance(inst)
+	if not CoreGui then return end
 
-	-- whitelist UI
-	if isRobloxUI(inst) then return end
+	-- hanya peduli kalau benar2 di bawah CoreGui
+	if not inst:IsDescendantOf(CoreGui) then
+		return
+	end
 
-	-- kalau bukan suspicious → skip
-	if not isSuspicious(inst) then return end
+	-- kalau bagian dari UI roblox → aman
+	if isWhitelistedCoreGui(inst) then
+		return
+	end
 
-	-- KEY VALIDATION
+	-- kadang executor bikin ScreenGui/Frame/Button custom
+	-- nama aneh2 / gak ada di whitelist → kita anggap mencurigakan
+	local fullName
+	pcall(function()
+		fullName = inst:GetFullName()
+	end)
+
+	fullName = fullName or tostring(inst)
+
+	AntiCheat:FireServer("CoreGuiInjected", fullName)
+end
+
+-- scan awal: kalau executor inject UI SEBELUM script ini jalan
+if CoreGui then
+	for _, inst in ipairs(CoreGui:GetDescendants()) do
+		handleCoreGuiInstance(inst)
+	end
+
+	-- listen kalau ada yang nambah ke CoreGui (setelah game jalan)
+	CoreGui.DescendantAdded:Connect(function(inst)
+		handleCoreGuiInstance(inst)
+	end)
+end
+
+-----------------------------------------------------
+-- OPTIONAL: DETEKSI INJECTION LANGSUNG KE REPLICATEDSTORAGE
+-- (tanpa sentuh Key system, biar nggak flood)
+-----------------------------------------------------
+local function isSuspiciousReplicatedChild(inst)
+	-- hanya cek anak langsung ReplicatedStorage,
+	-- karena child lain di dalam folder game kamu bisa apa saja
+	if inst.Parent ~= Replicated then
+		return false
+	end
+
+	-- remote / folder bawaan game kamu bisa di-whitelist manual kalau mau
+	local name = inst.Name
+
+	-- contoh whitelist minimal:
+	if name == "AntiCheat"
+		or name == "CheckChildExists"
+		or name == "GetKey"
+		or name == "Loadstring"
+		or name == "PlayerAdded"
+		or name == "Check" then
+		return false
+	end
+
+	return true
+end
+
+local function handleReplicatedChild(inst)
+	if not isSuspiciousReplicatedChild(inst) then
+		return
+	end
+
+	-- tanya ke server: beneran ada object dengan nama ini di ReplicatedStorage server?
 	local existsOnServer = false
 	pcall(function()
-		existsOnServer = CheckChild:InvokeServer(inst.Parent.Name, inst.Name)
+		existsOnServer = CheckChild:InvokeServer("ReplicatedStorage", inst.Name)
 	end)
 
-	local key = inst:FindFirstChild("Key")
-	local correctKey
-
+	local fullName
 	pcall(function()
-		correctKey = GetKey:InvokeServer()
+		fullName = inst:GetFullName()
 	end)
+	fullName = fullName or tostring(inst)
 
-	-- valid kalau instance benar-benar milik server
-	if existsOnServer then
-		if key and key.Value == correctKey then
-			return
-		else
-			AntiCheat:FireServer("WrongKey", inst:GetFullName())
-			return
-		end
+	if not existsOnServer then
+		AntiCheat:FireServer("InjectedIntoReplicated", fullName)
 	end
+end
 
-	-- selain itu = injected object
-	AntiCheat:FireServer("InjectedInstance", inst:GetFullName())
+-- cek anak awal di ReplicatedStorage
+for _, child in ipairs(Replicated:GetChildren()) do
+	handleReplicatedChild(child)
+end
+
+-- listen kalau ada yang inject ke ReplicatedStorage
+Replicated.DescendantAdded:Connect(function(inst)
+	handleReplicatedChild(inst)
 end)
+
+-----------------------------------------------------
+-- CATATAN:
+-- Di script client ini kita SENGAJA tidak pakai sistem Key
+-- untuk Workspace / Character dsb supaya tidak auto ban semua object.
+-- Fokus utama:
+-- 1) UI executor di CoreGui
+-- 2) Object aneh yang langsung muncul di ReplicatedStorage
+-----------------------------------------------------
