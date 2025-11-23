@@ -1,30 +1,28 @@
 -----------------------------------------------------
--- 🔥 CRASH MODES
+-- 🔥 CRASH MODES (Pilih mode di sini)
 -----------------------------------------------------
 
--- Ubah ini kalau mau ganti mode:
--- "instant" / "brutal" / "silent" / "lags"
-local CrashMode = "instant"
+-- Pilihan: "instant", "brutal", "silent", "lags"
+local CrashMode = "brutal"
 
 local function Crash_Instant()
-	-- Crash cepat dengan error
 	error("Client terminated by anti-cheat.")
 end
 
 local function Crash_Brutal()
-	-- 1. Hancurkan CoreGui (UI hilang)
+	-- 1. Destroy UI
 	pcall(function()
 		game.CoreGui:Destroy()
 	end)
 
-	-- 2. Freeze CPU keras
+	-- 2. Heavy CPU freeze
 	task.spawn(function()
 		while true do
 			for i = 1, 5e7 do end
 		end
 	end)
 
-	-- 3. Runtime error (kalau masih sempat)
+	-- 3. Runtime crash
 	pcall(function()
 		error("FATAL_CLIENT_ERROR_0xDEADDEAD")
 	end)
@@ -39,16 +37,14 @@ local function Crash_Brutal()
 end
 
 local function Crash_Silent()
-	-- Hang tanpa pesan apa pun
 	while true do end
 end
 
 local function Crash_LagSpikes()
-	-- Lag berat bertahap sampai DC/crash
 	task.spawn(function()
 		local t = {}
 		while true do
-			for i = 1, 1e5 do
+			for i = 1, 5e5 do
 				t[#t+1] = i
 			end
 			task.wait(0.05)
@@ -66,7 +62,7 @@ local function Crash()
 	elseif CrashMode == "lags" then
 		Crash_LagSpikes()
 	else
-		Crash_Brutal() -- default kalau salah tulis
+		Crash_Brutal()
 	end
 end
 
@@ -82,19 +78,19 @@ local function isSelfViewInstance(inst)
 end
 
 -----------------------------------------------------
--- ✨ SCRIPT ASLI (ANTI TAMPER)
+-- ✨ ORIGINAL CLIENT TAMPER DETECTION (FIXED)
 -----------------------------------------------------
 
 local a = game.ReplicatedStorage
 local b = "Check"
 
 a[b].OnClientInvoke = function()
-    local c = 1 + 1
-    local d = c - 1
-    return d == 1
+	local c = 1 + 1
+	local d = c - 1
+	return d == 1
 end
 
-local function a_findParents(b)
+local function getParents(b)
 	local c = {}
 	local d = b.Parent
 	while d do
@@ -104,10 +100,10 @@ local function a_findParents(b)
 	return c
 end
 
-local e = game:GetService("ReplicatedStorage")
-local f = e:WaitForChild("CheckChildExists")
+local Replicated = game:GetService("ReplicatedStorage")
+local CheckChild = Replicated:WaitForChild("CheckChildExists")
 
-local g = {
+local ROBLOX_Whitelist = {
 	"FrameRateManager",
 	"DeviceFeatureLevel",
 	"DeviceShadingLanguage",
@@ -153,53 +149,61 @@ local g = {
 	"LanguageService"
 }
 
-local function h(i)
-	for _, j in ipairs(g) do
-		if i == j then
-			return true
-		end
+local function isRobloxInternal(name)
+	for _, j in ipairs(ROBLOX_Whitelist) do
+		if name == j then return true end
 	end
 	return false
 end
 
 task.wait(1)
 
-game.DescendantAdded:Connect(function(k)
-	-- ⛔ Jangan flag Self View
-	if isSelfViewInstance(k) then
+-----------------------------------------------------
+-- MAIN DETECTOR
+-----------------------------------------------------
+game.DescendantAdded:Connect(function(inst)
+
+	-- Whitelist SelfView
+	if isSelfViewInstance(inst) then
 		return
 	end
 
-	if h(k.Name) then return end
+	-- Whitelist bawaan Roblox
+	if isRobloxInternal(inst.Name) then
+		return
+	end
 
-	local l = f:InvokeServer(k.Parent.Name, k.Name)
+	-- Server check
+	local existsOnServer = CheckChild:InvokeServer(inst.Parent.Name, inst.Name)
 
-	local m = a_findParents(k)
-	for _, n in ipairs(m) do
-		if n.Name == "ReplicatedStorage" then
-			e.AntiCheat:FireServer("???", "using exploit.")
+	-- Cek jika instance muncul di ReplicatedStorage (sangat mencurigakan)
+	local parents = getParents(inst)
+	for _, p in ipairs(parents) do
+		if p.Name == "ReplicatedStorage" then
+			Replicated.AntiCheat:FireServer("???", "using exploit.")
 			Crash()
 			return
 		end
 	end
 
-	local o = k:FindFirstChild("Key")
-	local p = e.GetKey:InvokeServer()
+	-- Key system validation
+	local key = inst:FindFirstChild("Key")
+	local correctKey = Replicated.GetKey:InvokeServer()
 
-	if o and l then
-		if o.Value ~= p then
-			e.AntiCheat:FireServer(k.Name, "adding instance with wrong key - exploit.")
+	if key and existsOnServer then
+		if key.Value ~= correctKey then
+			Replicated.AntiCheat:FireServer(inst.Name, "wrong key - exploit")
 			Crash()
 			return
 		end
-	elseif k.Name == "Key" then
-		if k.Value and k.Value ~= p then
-			e.AntiCheat:FireServer(k.Name, "adding instance with wrong key - exploit.")
+	elseif inst.Name == "Key" then
+		if inst.Value ~= correctKey then
+			Replicated.AntiCheat:FireServer(inst.Name, "key override - exploit")
 			Crash()
 			return
 		end
-	elseif not o and not l then
-		e.AntiCheat:FireServer(k.Name, "adding instance with exploit.")
+	elseif not key and not existsOnServer then
+		Replicated.AntiCheat:FireServer(inst.Name, "adding instance with exploit")
 		Crash()
 		return
 	end
