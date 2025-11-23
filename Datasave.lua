@@ -1,102 +1,100 @@
 -----------------------------------------------------
--- 🔥 CRASH MODES (Pilih mode di sini)
+-- 🔥 SERVICES
 -----------------------------------------------------
+local Replicated = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
 -----------------------------------------------------
--- 🔥 DETEKSI INSTAN SEBELUM APA PUN JALAN
+-- 🔥 DETEKSI INSTAN SEBELUM APA PUN JALAN (LEGAL)
 -----------------------------------------------------
 local function fastExploitCheck()
-    if identifyexecutor or getgenv or getrenv or getgc then
-        return true
-    end
-    return false
+	-- Deteksi environment executor → lapor ke server
+	if identifyexecutor or getgenv or getrenv or getgc then
+		return true
+	end
+	return false
 end
 
 if fastExploitCheck() then
-    game:GetService("ReplicatedStorage").AntiCheat:FireServer("InstantDetect", "Executor detected before load")
-    return
+	Replicated.AntiCheat:FireServer("InstantDetect", "Executor detected before load")
+	-- Biar server yang ban/kick
+	return
 end
 
--- Pilihan: "instant", "brutal", "silent", "lags"
-local CrashMode = "brutal"
-
-local function Crash_Instant()
-	error("Client terminated by anti-cheat.")
-end
-
-local function Crash_Brutal()
-	-- 1. Destroy UI
-	pcall(function()
-		game.CoreGui:Destroy()
-	end)
-
-	-- 2. Heavy CPU freeze
-	task.spawn(function()
-		while true do
-			for i = 1, 5e7 do end
-		end
-	end)
-
-	-- 3. Runtime crash
-	pcall(function()
-		error("FATAL_CLIENT_ERROR_0xDEADDEAD")
-	end)
-
-	-- 4. Memory flood
-	task.spawn(function()
-		local t = {}
-		while true do
-			table.insert(t, {})
-		end
-	end)
-end
-
-local function Crash_Silent()
-	while true do end
-end
-
-local function Crash_LagSpikes()
-	task.spawn(function()
-		local t = {}
-		while true do
-			for i = 1, 5e5 do
-				t[#t+1] = i
-			end
-			task.wait(0.05)
-		end
-	end)
-end
-
-local function Crash()
-	if CrashMode == "instant" then
-		Crash_Instant()
-	elseif CrashMode == "brutal" then
-		Crash_Brutal()
-	elseif CrashMode == "silent" then
-		Crash_Silent()
-	elseif CrashMode == "lags" then
-		Crash_LagSpikes()
-	else
-		Crash_Brutal()
+-----------------------------------------------------
+-- 🟢 ROBLOX SYSTEM UI WHITELIST (SelfView, Menu, Emote, Musik, Avatar etc)
+-----------------------------------------------------
+local function isRobloxSystemInstance(inst)
+	if not inst or not inst.Name then
+		return false
 	end
+
+	local allowed = {
+		-- SelfView / kamera
+		["SelfView"] = true,
+		["FaceAnimator"] = true,
+		["CameraTracking"] = true,
+		["VideoStreamer"] = true,
+
+		-- Menu / UI Roblox
+		["InGameMenu"] = true,
+		["InGameMenuV3"] = true,
+		["TopBar"] = true,
+		["PlayerList"] = true,
+		["PlayerListManager"] = true,
+		["Backpack"] = true,
+		["BackpackUI"] = true,
+		["Chat"] = true,
+		["ChatWindow"] = true,
+		["BubbleChat"] = true,
+		["NotificationScreenGui"] = true,
+		["ContextActionGui"] = true,
+		["EmotesMenu"] = true,
+		["EmotesList"] = true,
+		["AvatarEditorInGame"] = true,
+		["AvatarEditor"] = true,
+		["PurchasePrompt"] = true,
+		["PromptUI"] = true,
+		["RecordTab"] = true,
+		["ReportDialog"] = true,
+		["Leaderboard"] = true,
+
+		-- Core Roblox GUI
+		["RobloxGui"] = true,
+		["CoreGui"] = true,
+	}
+
+	if allowed[inst.Name] then
+		return true
+	end
+	if inst.Parent and allowed[inst.Parent.Name] then
+		return true
+	end
+
+	-- Semua yang berada di dalam CoreGui = aman
+	if inst:IsDescendantOf(game.CoreGui) then
+		return true
+	end
+
+	-- Semua yang berada di dalam PlayerGui = UI pemain (aman)
+	local lp = Players.LocalPlayer
+	if lp then
+		local pg = lp:FindFirstChild("PlayerGui")
+		if pg and inst:IsDescendantOf(pg) then
+			return true
+		end
+	end
+
+	return false
 end
 
 -----------------------------------------------------
--- 🟢 SELF VIEW WHITELIST
------------------------------------------------------
-local function isSelfViewInstance(inst)
-	return inst.Name == "SelfView"
-		or (inst.Parent and inst.Parent.Name == "SelfView")
-		or inst.Name == "FaceAnimator"
-		or inst.Name == "CameraTracking"
-		or inst.Name == "VideoStreamer"
-end
-
------------------------------------------------------
--- ✨ ORIGINAL CLIENT TAMPER DETECTION (FIXED)
+-- ✨ ORIGINAL CLIENT TAMPER DETECTION (LEGAL)
 -----------------------------------------------------
 
-local a = game.ReplicatedStorage
-local b = "Check"
+local CheckFuncName = "Check"
+local a = Replicated
+local b = CheckFuncName
 
 a[b].OnClientInvoke = function()
 	local c = 1 + 1
@@ -104,17 +102,16 @@ a[b].OnClientInvoke = function()
 	return d == 1
 end
 
-local function getParents(b)
-	local c = {}
-	local d = b.Parent
-	while d do
-		table.insert(c, d)
-		d = d.Parent
+local function getParents(node)
+	local list = {}
+	local parent = node.Parent
+	while parent do
+		table.insert(list, parent)
+		parent = parent.Parent
 	end
-	return c
+	return list
 end
 
-local Replicated = game:GetService("ReplicatedStorage")
 local CheckChild = Replicated:WaitForChild("CheckChildExists")
 
 local ROBLOX_Whitelist = {
@@ -160,12 +157,14 @@ local ROBLOX_Whitelist = {
 	"Memory",
 	"Video",
 	"CursorImage",
-	"LanguageService"
+	"LanguageService",
 }
 
 local function isRobloxInternal(name)
 	for _, j in ipairs(ROBLOX_Whitelist) do
-		if name == j then return true end
+		if name == j then
+			return true
+		end
 	end
 	return false
 end
@@ -173,52 +172,63 @@ end
 task.wait(1)
 
 -----------------------------------------------------
--- MAIN DETECTOR
+-- MAIN DETECTOR (LEGAL – TANPA CRASH)
 -----------------------------------------------------
 game.DescendantAdded:Connect(function(inst)
-
-	-- Whitelist SelfView
-	if isSelfViewInstance(inst) then
+	-- Whitelist semua UI sistem Roblox
+	if isRobloxSystemInstance(inst) then
 		return
 	end
 
-	-- Whitelist bawaan Roblox
+	-- Whitelist internal ROBLOX (statistik dll)
 	if isRobloxInternal(inst.Name) then
 		return
 	end
 
 	-- Server check
-	local existsOnServer = CheckChild:InvokeServer(inst.Parent.Name, inst.Name)
+	local parentName = inst.Parent and inst.Parent.Name or "nil"
+	local existsOnServer = false
 
-	-- Cek jika instance muncul di ReplicatedStorage (sangat mencurigakan)
+	local ok, err = pcall(function()
+		existsOnServer = CheckChild:InvokeServer(parentName, inst.Name)
+	end)
+	if not ok then
+		warn("[AntiCheatClient] CheckChildExists error:", err)
+	end
+
+	-- Kalau ada di dalam ReplicatedStorage → sangat mencurigakan
 	local parents = getParents(inst)
 	for _, p in ipairs(parents) do
 		if p.Name == "ReplicatedStorage" then
-			Replicated.AntiCheat:FireServer("???", "using exploit.")
-			Crash()
+			Replicated.AntiCheat:FireServer("ReplicatedStorageInject", "using exploit.")
 			return
 		end
 	end
 
-	-- Key system validation
+	-- Key validation
 	local key = inst:FindFirstChild("Key")
-	local correctKey = Replicated.GetKey:InvokeServer()
+	local correctKey
+
+	local ok2, err2 = pcall(function()
+		correctKey = Replicated.GetKey:InvokeServer()
+	end)
+	if not ok2 then
+		warn("[AntiCheatClient] GetKey error:", err2)
+		return
+	end
 
 	if key and existsOnServer then
 		if key.Value ~= correctKey then
 			Replicated.AntiCheat:FireServer(inst.Name, "wrong key - exploit")
-			Crash()
 			return
 		end
 	elseif inst.Name == "Key" then
 		if inst.Value ~= correctKey then
 			Replicated.AntiCheat:FireServer(inst.Name, "key override - exploit")
-			Crash()
 			return
 		end
 	elseif not key and not existsOnServer then
 		Replicated.AntiCheat:FireServer(inst.Name, "adding instance with exploit")
-		Crash()
 		return
 	end
 end)
