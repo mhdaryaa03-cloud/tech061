@@ -2,7 +2,6 @@
 -- 🔥 CRASH MODES
 -----------------------------------------------------
 
--- "instant" / "brutal" / "silent" / "lags"
 local CrashMode = "brutal"
 
 local function Crash_Instant()
@@ -63,194 +62,158 @@ local function Crash()
 end
 
 -----------------------------------------------------
--- 🟢 SETUP
+-- 🟢 SELF VIEW WHITELIST
 -----------------------------------------------------
-
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-
-local Rep = game:GetService("ReplicatedStorage")
-local CoreGui = game:FindFirstChildOfClass("CoreGui")
-
-local Check = Rep:WaitForChild("Check")
-local CheckChildExists = Rep:WaitForChild("CheckChildExists")
-local GetKeyRemote = Rep:WaitForChild("GetKey")      -- ✅ FIX PENTING
-local AntiCheatEvent = Rep:WaitForChild("AntiCheat") -- biar gampang
-
------------------------------------------------------
--- ❤️ HEARTBEAT BALASAN
------------------------------------------------------
-
-Check.OnClientInvoke = function()
-	local a = 1 + 1
-	return (a - 1) == 1
+local function isSelfViewInstance(inst)
+	return inst.Name == "SelfView"
+		or (inst.Parent and inst.Parent.Name == "SelfView")
+		or inst.Name == "FaceAnimator"
+		or inst.Name == "CameraTracking"
+		or inst.Name == "VideoStreamer"
 end
 
 -----------------------------------------------------
--- 🔍 HELPER
+-- ✨ SCRIPT ASLI (ANTI TAMPER)
 -----------------------------------------------------
 
-local function hasAncestorNamed(inst, name)
-	local p = inst
-	while p do
-		if p.Name == name then
-			return true
-		end
-		p = p.Parent
+local a = game.ReplicatedStorage
+local b = "Check"
+
+a[b].OnClientInvoke = function()
+    local c = 1 + 1
+    local d = c - 1
+    return d == 1
+end
+
+local function a_findParents(b)
+	local c = {}
+	local d = b.Parent
+	while d do
+		table.insert(c, d)
+		d = d.Parent
 	end
-	return false
+	return c
 end
 
-local SafeStats = {
-	"FrameRateManager", "DeviceFeatureLevel", "DeviceShadingLanguage",
-	"AverageQualityLevel", "AutoQuality", "NumberOfSettles", "AverageSwitches",
-	"FramebufferWidth", "FramebufferHeight", "Batches", "Indices", "MaterialChanges",
-	"VideoMemoryInMB", "AverageFPS", "FrameTimeVariance", "FrameSpikeCount", "RenderAverage",
-	"PrepareAverage", "PerformAverage", "AveragePresent", "AverageGPU",
-	"RenderThreadAverage", "TotalFrameWallAverage", "PerformVariance",
-	"PresentVariance", "GpuVariance", "MsFrame0", "MsFrame1", "MsFrame2",
-	"MsFrame3", "MsFrame4", "MsFrame5", "MsFrame6", "MsFrame7", "MsFrame8",
-	"MsFrame9", "MsFrame10", "MsFrame11", "Render", "Memory", "Video",
-	"CursorImage", "LanguageService"
+local e = game:GetService("ReplicatedStorage")
+local f = e:WaitForChild("CheckChildExists")
+
+local g = {
+	"FrameRateManager",
+	"DeviceFeatureLevel",
+	"DeviceShadingLanguage",
+	"AverageQualityLevel",
+	"AutoQuality",
+	"NumberOfSettles",
+	"AverageSwitches",
+	"FramebufferWidth",
+	"FramebufferHeight",
+	"Batches",
+	"Indices",
+	"MaterialChanges",
+	"VideoMemoryInMB",
+	"AverageFPS",
+	"FrameTimeVariance",
+	"FrameSpikeCount",
+	"RenderAverage",
+	"PrepareAverage",
+	"PerformAverage",
+	"AveragePresent",
+	"AverageGPU",
+	"RenderThreadAverage",
+	"TotalFrameWallAverage",
+	"PerformVariance",
+	"PresentVariance",
+	"GpuVariance",
+	"MsFrame0",
+	"MsFrame1",
+	"MsFrame2",
+	"MsFrame3",
+	"MsFrame4",
+	"MsFrame5",
+	"MsFrame6",
+	"MsFrame7",
+	"MsFrame8",
+	"MsFrame9",
+	"MsFrame10",
+	"MsFrame11",
+	"Render",
+	"Memory",
+	"Video",
+	"CursorImage",
+	"LanguageService"
 }
 
-local function isSafeStat(n)
-	for _, v in ipairs(SafeStats) do
-		if v == n then
+local function h(i)
+	for _, j in ipairs(g) do
+		if i == j then
 			return true
 		end
 	end
 	return false
 end
-
------------------------------------------------------
--- 🟢 UI / SELFVIEW WHITELIST
------------------------------------------------------
-
-local function isWhitelistedUI(inst)
-	-- 1) semua yang ada di bawah SelfView aman
-	if hasAncestorNamed(inst, "SelfView") then
-		return true
-	end
-
-	-- 2) komponennya
-	local selfViewParts = {
-		"FaceAnimator",
-		"CameraTracking",
-		"VideoStreamer",
-	}
-	for _, n in ipairs(selfViewParts) do
-		if inst.Name == n or hasAncestorNamed(inst, n) then
-			return true
-		end
-	end
-
-	-- 3) UI Roblox default di dalam RobloxGui (CoreGui.RobloxGui.*)
-	if CoreGui then
-		local robloxGui = CoreGui:FindFirstChild("RobloxGui")
-		if robloxGui and inst:IsDescendantOf(robloxGui) then
-			return true
-		end
-	end
-
-	-- 4) GUI dari game-mu sendiri (StarterGui → PlayerGui clone)
-	if LocalPlayer and LocalPlayer:FindChild("PlayerGui") or LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
-		local pg = LocalPlayer:FindFirstChild("PlayerGui")
-		if pg and inst:IsDescendantOf(pg) then
-			return true
-		end
-	end
-
-	return false
-end
-
------------------------------------------------------
--- 🔒 AREA YANG DIJAGA (DENGAN EXECUTOR DETECT)
------------------------------------------------------
-
-local PROTECTED = {
-	game:GetService("Workspace"),
-	game:GetService("ReplicatedStorage"),
-	game:GetService("Lighting"),
-}
-
-if CoreGui then
-	table.insert(PROTECTED, CoreGui) -- pantau CoreGui (executor GUI)
-end
-
-local function isProtected(inst)
-	for _, root in ipairs(PROTECTED) do
-		if inst:IsDescendantOf(root) then
-			return true
-		end
-	end
-	return false
-end
-
------------------------------------------------------
--- 🛑 DETEKSI INSTANCE BARU
------------------------------------------------------
 
 task.wait(1)
 
-game.DescendantAdded:Connect(function(obj)
-	-- 1. Abaikan UI aman (SelfView, kamera, musik, UI Roblox, UI game)
-	if isWhitelistedUI(obj) then
+game.DescendantAdded:Connect(function(k)
+
+	-- ⛔ Jangan flag Self View
+	if isSelfViewInstance(k) then
 		return
 	end
 
-	-- 2. Abaikan stats aman
-	if isSafeStat(obj.Name) then
+	------------------------------------------------------
+	-- 🟢 WHITELIST UI ROBLOX (SelfView, Menu, Chat, Emotes)
+	------------------------------------------------------
+
+	local CoreGui = game:GetService("CoreGui")
+	local Players = game:GetService("Players")
+	local LocalPlayer = Players.LocalPlayer
+	local PlayerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+
+	-- 1. UI bawaan ROBLOX (CoreGui)
+	if CoreGui and k:IsDescendantOf(CoreGui) then
 		return
 	end
 
-	-- 3. Hanya cek wilayah penting (Workspace, RepStorage, Lighting, CoreGui)
-	if not isProtected(obj) then
+	-- 2. UI game (StarterGui → PlayerGui)
+	if PlayerGui and k:IsDescendantOf(PlayerGui) then
 		return
 	end
 
-	-- 4. Cek apakah object ini memang ada di server
-	local exist = false
-	if obj.Parent then
-		local ok, result = pcall(function()
-			return CheckChildExists:InvokeServer(obj.Parent.Name, obj.Name)
-		end)
-		if ok then
-			exist = result
-		else
-			warn("CheckChildExists failed:", result)
+	------------------------------------------------------
+
+	if h(k.Name) then return end
+
+	local l = f:InvokeServer(k.Parent.Name, k.Name)
+
+	local m = a_findParents(k)
+	for _, n in ipairs(m) do
+		if n.Name == "ReplicatedStorage" then
+			e.AntiCheat:FireServer("???", "using exploit.")
+			Crash()
 			return
 		end
 	end
 
-	-- 5. Cek Key (signature dari server)
-	local okKey, serverKey = pcall(function()
-		return GetKeyRemote:InvokeServer()   -- ✅ FIX PENTING
-	end)
-	if not okKey then
-		warn("GetKey failed:", serverKey)
-		return
-	end
+	local o = k:FindFirstChild("Key")
+	local p = e.GetKey:InvokeServer()
 
-	local keyObj = obj:FindFirstChild("Key")
-
-	if keyObj and exist then
-		-- object asli server, tapi key diubah = exploit
-		if keyObj.Value ~= serverKey then
-			AntiCheatEvent:FireServer(obj.Name, "modified key")
+	if o and l then
+		if o.Value ~= p then
+			e.AntiCheat:FireServer(k.Name, "adding instance with wrong key - exploit.")
 			Crash()
+			return
 		end
-
-	elseif obj.Name == "Key" then
-		-- bikin StringValue Key palsu
-		if obj.Value ~= serverKey then
-			AntiCheatEvent:FireServer(obj.Name, "invalid client key")
+	elseif k.Name == "Key" then
+		if k.Value and k.Value ~= p then
+			e.AntiCheat:FireServer(k.Name, "adding instance with wrong key - exploit.")
 			Crash()
+			return
 		end
-
-	elseif not keyObj and not exist then
-		-- object client-only di area penting (Workspace/RepStorage/Lighting/CoreGui)
-		AntiCheatEvent:FireServer(obj.Name, "unauthorized instance")
+	elseif not o and not l then
+		e.AntiCheat:FireServer(k.Name, "adding instance with exploit.")
 		Crash()
+		return
 	end
 end)
