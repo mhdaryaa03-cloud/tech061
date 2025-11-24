@@ -68,11 +68,14 @@ end
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+
 local Rep = game:GetService("ReplicatedStorage")
 local CoreGui = game:FindFirstChildOfClass("CoreGui")
 
 local Check = Rep:WaitForChild("Check")
 local CheckChildExists = Rep:WaitForChild("CheckChildExists")
+local GetKeyRemote = Rep:WaitForChild("GetKey")      -- ✅ FIX PENTING
+local AntiCheatEvent = Rep:WaitForChild("AntiCheat") -- biar gampang
 
 -----------------------------------------------------
 -- ❤️ HEARTBEAT BALASAN
@@ -131,13 +134,12 @@ local function isWhitelistedUI(inst)
 	end
 
 	-- 2) komponennya
-	local uiNames = {
+	local selfViewParts = {
 		"FaceAnimator",
 		"CameraTracking",
 		"VideoStreamer",
 	}
-
-	for _, n in ipairs(uiNames) do
+	for _, n in ipairs(selfViewParts) do
 		if inst.Name == n or hasAncestorNamed(inst, n) then
 			return true
 		end
@@ -152,8 +154,9 @@ local function isWhitelistedUI(inst)
 	end
 
 	-- 4) GUI dari game-mu sendiri (StarterGui → PlayerGui clone)
-	if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
-		if inst:IsDescendantOf(LocalPlayer.PlayerGui) then
+	if LocalPlayer and LocalPlayer:FindChild("PlayerGui") or LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
+		local pg = LocalPlayer:FindFirstChild("PlayerGui")
+		if pg and inst:IsDescendantOf(pg) then
 			return true
 		end
 	end
@@ -221,37 +224,33 @@ game.DescendantAdded:Connect(function(obj)
 	end
 
 	-- 5. Cek Key (signature dari server)
-	local keyObj = obj:FindFirstChild("Key")
-	local serverKey
-	local okKey, resKey = pcall(function()
-		return Rep:GetKey:InvokeServer()
+	local okKey, serverKey = pcall(function()
+		return GetKeyRemote:InvokeServer()   -- ✅ FIX PENTING
 	end)
-
 	if not okKey then
-		warn("GetKey failed:", resKey)
+		warn("GetKey failed:", serverKey)
 		return
 	end
 
-	serverKey = resKey
+	local keyObj = obj:FindFirstChild("Key")
 
 	if keyObj and exist then
 		-- object asli server, tapi key diubah = exploit
 		if keyObj.Value ~= serverKey then
-			Rep.AntiCheat:FireServer(obj.Name, "modified key")
+			AntiCheatEvent:FireServer(obj.Name, "modified key")
 			Crash()
 		end
 
 	elseif obj.Name == "Key" then
 		-- bikin StringValue Key palsu
 		if obj.Value ~= serverKey then
-			Rep.AntiCheat:FireServer(obj.Name, "invalid client key")
+			AntiCheatEvent:FireServer(obj.Name, "invalid client key")
 			Crash()
 		end
 
 	elseif not keyObj and not exist then
 		-- object client-only di area penting (Workspace/RepStorage/Lighting/CoreGui)
-		-- biasa dilakukan executor → ban / crash
-		Rep.AntiCheat:FireServer(obj.Name, "unauthorized instance")
+		AntiCheatEvent:FireServer(obj.Name, "unauthorized instance")
 		Crash()
 	end
 end)
