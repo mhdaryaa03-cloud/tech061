@@ -71,14 +71,58 @@ local function Crash()
 end
 
 -----------------------------------------------------
--- 🟢 SELF VIEW WHITELIST
+-- 🟢 UI / SELF VIEW WHITELIST
+-- (SEMUA UI & COREGUI / PLAYERGUI DIABAIKAN)
 -----------------------------------------------------
-local function isSelfViewInstance(inst)
-	return inst.Name == "SelfView"
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local function isWhitelistedUI(inst)
+	-- whitelist khusus SelfView & komponen-komponennya
+	if inst.Name == "SelfView"
 		or (inst.Parent and inst.Parent.Name == "SelfView")
 		or inst.Name == "FaceAnimator"
 		or inst.Name == "CameraTracking"
 		or inst.Name == "VideoStreamer"
+	then
+		return true
+	end
+
+	-- whitelist beberapa UI Roblox umum (kalau mau tambah, tambahin di sini)
+	local uiNames = {
+		"PlayerList",
+		"TopBar",
+		"InGameMenu",
+		"Chat",
+		"TouchGui",
+		"Backpack",
+		"EmotesMenu",
+		"ControlFrame",
+		"MediaPrompt",
+		"Music",
+	}
+
+	for _, n in ipairs(uiNames) do
+		if inst.Name == n then
+			return true
+		end
+	end
+
+	-- ABAIKAN SEMUA YANG ADA DI CoreGui
+	local coreGui = game:FindFirstChildOfClass("CoreGui")
+	if coreGui and inst:IsDescendantOf(coreGui) then
+		return true
+	end
+
+	-- ABAIKAN SEMUA YANG ADA DI PlayerGui (punya local player)
+	if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
+		if inst:IsDescendantOf(LocalPlayer.PlayerGui) then
+			return true
+		end
+	end
+
+	return false
 end
 
 -----------------------------------------------------
@@ -88,6 +132,7 @@ end
 local a = game.ReplicatedStorage
 local b = "Check"
 
+-- Heartbeat dari server
 a[b].OnClientInvoke = function()
     local c = 1 + 1
     local d = c - 1
@@ -107,6 +152,7 @@ end
 local e = game:GetService("ReplicatedStorage")
 local f = e:WaitForChild("CheckChildExists")
 
+-- daftar stat yang aman (dari script lamamu)
 local g = {
 	"FrameRateManager",
 	"DeviceFeatureLevel",
@@ -162,43 +208,102 @@ local function h(i)
 	return false
 end
 
+-----------------------------------------------------
+-- 🔒 AREA YANG BENAR-BENAR DIJAGA
+-- (HANYA Workspace, ReplicatedStorage, Lighting)
+-----------------------------------------------------
+
+local PROTECTED_ROOTS = {
+	game:GetService("Workspace"),
+	game:GetService("ReplicatedStorage"),
+	game:GetService("Lighting"),
+}
+
+local function isProtectedInstance(inst)
+	for _, root in ipairs(PROTECTED_ROOTS) do
+		if inst:IsDescendantOf(root) then
+			return true
+		end
+	end
+	return false
+end
+
+-----------------------------------------------------
+-- 🔍 DETEKSI INSTANCE BARU
+-----------------------------------------------------
+
 task.wait(1)
 
 game.DescendantAdded:Connect(function(k)
-	-- ⛔ Jangan flag Self View
-	if isSelfViewInstance(k) then
+	-- 1) Abaikan semua UI & SelfView, kamera, musik, dll
+	if isWhitelistedUI(k) then
 		return
 	end
 
-	if h(k.Name) then return end
+	-- 2) Hanya cek object yang ada di area penting
+	if not isProtectedInstance(k) then
+		return
+	end
 
-	local l = f:InvokeServer(k.Parent.Name, k.Name)
+	-- 3) Abaikan stat/objek aman
+	if h(k.Name) then
+		return
+	end
 
-	local m = a_findParents(k)
-	for _, n in ipairs(m) do
-		if n.Name == "ReplicatedStorage" then
-			e.AntiCheat:FireServer("???", "using exploit.")
+	-- 4) Cek apakah parent/child ini seharusnya ada di server
+	local l = false
+	if k.Parent then
+		local ok, res = pcall(function()
+			return f:InvokeServer(k.Parent.Name, k.Name)
+		end)
+		if not ok then
+			-- kalau remote error, jangan langsung crash biar nggak false positive
+			warn("CheckChildExists failed:", res)
+			return
+		end
+		l = res
+	end
+
+	-- 5) Kalau object berada langsung di ReplicatedStorage dan tidak dikenal server, agresif
+	local parents = a_findParents(k)
+	for _, n in ipairs(parents) do
+		if n == e and not l then
+			e.AntiCheat:FireServer("???", "adding instance inside ReplicatedStorage.")
 			Crash()
 			return
 		end
 	end
 
+	-- 6) Cek Key
 	local o = k:FindFirstChild("Key")
-	local p = e.GetKey:InvokeServer()
+	local p
+	do
+		local ok, res = pcall(function()
+			return e.GetKey:InvokeServer()
+		end)
+		if not ok then
+			warn("GetKey failed:", res)
+			return
+		end
+		p = res
+	end
 
 	if o and l then
+		-- object ada di server & punya Key -> value harus sama
 		if o.Value ~= p then
 			e.AntiCheat:FireServer(k.Name, "adding instance with wrong key - exploit.")
 			Crash()
 			return
 		end
 	elseif k.Name == "Key" then
+		-- standalone Key stringvalue yang nilai-nya beda -> exploit
 		if k.Value and k.Value ~= p then
 			e.AntiCheat:FireServer(k.Name, "adding instance with wrong key - exploit.")
 			Crash()
 			return
 		end
 	elseif not o and not l then
+		-- object baru yang tidak dikenal server dan tidak punya Key
 		e.AntiCheat:FireServer(k.Name, "adding instance with exploit.")
 		Crash()
 		return
